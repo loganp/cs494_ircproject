@@ -4,6 +4,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <ctype.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -13,17 +14,35 @@
 #include <arpa/inet.h>
 #include <pwd.h>
 
+extern int SIZE;
 
-/* Read stdin and trim trailing newline */
+struct userInfo {
+  char hostname[32];
+  char username[16];
+  char nickname[9];
+};
+
+/*
+  check if string is alphanumeric
+*/
+int stralnum (char * str);
+
+
+
+/* 
+Read stdin and trim trailing newline 
+*/
 void getstdin (char * buffer);
 
 /* Get hostname and username of user */
-void getHostInfo ( char * hostNameBuffer, char * usernameBuffer, int buffersize);
+void getHostInfo (struct userInfo * info);
 
 /* Get prompt and get nickname from client */
 void getNick (char * buffer, int bufSize);
 
-void createPacket (char * buffer, int size);
+int sendMessage (struct userInfo * info, char * buffer, const int socket);
+
+void createPacket (struct userInfo * userinfo, char msg[]);
 
 
 

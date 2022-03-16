@@ -7,30 +7,34 @@
 #include "server_functions.h"
 
 
-int main (int argc, char ** argv)
+int main ()
 {
-
   int welcomeSocketfd,
       connectionSocketfd,
-      port = 7000,  // static port
-      clientLength,
-      size = 256;
+      port = 7000;  // static port
+      
+  socklen_t clientLength;
 
   struct sockaddr_in server,
                      client;
+  memset (&server, '\0', sizeof(server));
 
-  struct clientData cliData;
+  struct serverData serverInfo;
+  memset (serverInfo.clients.hostname, '\0', 32);
+  memset (serverInfo.clients.username, '\0', 32);
+  memset (serverInfo.clients.nickname, '\0', 9);
+  memset (serverInfo.clients.nickname, '\0', 16);
 
-  char buffer[size],
-       recBuffer[size],
-       clientName;
+  char buffer[SIZE];
+  memset (buffer, '\0', SIZE);
+
+  char * bufHead = buffer;
+
 
   if ((welcomeSocketfd = socket (AF_INET, SOCK_STREAM, 0)) == -1) {
     printf ("Error creating welcome socket\n");
     return -1;
   }
-  
-  memset (&server, '0', sizeof(server));
 
   server.sin_family = AF_INET;
   server.sin_addr.s_addr = INADDR_ANY;
@@ -57,48 +61,32 @@ int main (int argc, char ** argv)
 
   printf ("Client connected!");
 
-  // If here, client connected
-  // Get Client info  
-  if (read (connectionSocketfd, buffer, size) == -1)
-    return -1; 
-  strcpy (cliData.hostname, buffer);
-
-  if (read (connectionSocketfd, buffer, size) == -1)
-    return -1; 
-  strcpy (cliData.username, buffer);
-
-  if (read (connectionSocketfd, buffer, size) == -1) {
-    printf ("Error retrieving nick, error: %d\n", errno);
+  // If here, client connected, client will always first send empty packet
+  
+  if (read (connectionSocketfd, buffer, SIZE) == -1) {
     return -1; 
   }
-  strcpy (cliData.nickname, buffer);
 
-
-  memset (buffer, '\0', size);
+  // Add new client info
+  processMessage (buffer, &serverInfo, connectionSocketfd);
+  sendMessage (buffer, connectionSocketfd);
   
-  snprintf (buffer, size, "%s connected\n", cliData.nickname);
-  write (connectionSocketfd, buffer, size);
-
+// Now can procedd to 'regular' IRC communication
   while (1)
   {
-    memset (buffer, '0', size);
+    memset (buffer, '\0', SIZE);
 
-    if (read (connectionSocketfd, buffer, size) == -1) {
+    if (read (connectionSocketfd, buffer, SIZE) == -1) {
       printf ("Error reading from client, closing connection.\n");
       return -1; 
     }
+    else
+      printf ("received msg: %s\n", buffer);
 
     // TODO format and display message from client in buffer here
-    if (parseMessage (buffer, size) == -1) {
-      write (connectionSocketfd, buffer, size);
-      close (connectionSocketfd);
-      close (welcomeSocketfd);
-    }
-    write (connectionSocketfd, buffer, size);
+    processMessage (buffer, &serverInfo, connectionSocketfd);
 
     // TODO all communication logic here
-
   }
-
   return 0;
 }
