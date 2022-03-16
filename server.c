@@ -69,7 +69,6 @@ int main ()
 
   // Add new client info
   processMessage (buffer, &serverInfo, connectionSocketfd);
-  sendMessage (buffer, connectionSocketfd);
   
 // Now can procedd to 'regular' IRC communication
   while (1)

@@ -48,6 +48,8 @@ struct room {
   the array of connected clients and array of exisiting channels
 */
 struct serverData {
+ int roomCount,
+     activeClients;
   struct clientData clients;
   struct room rooms[16];
 };
@@ -109,13 +111,47 @@ void processMessage (char * mesage, struct serverData * data, const int socket);
 /*
   Process command received from client
 */
-void doCommand (struct prsdCommand *, struct clientData *, struct serverData *,
-                  const int socket); 
+void doCommand (struct prsdCommand *, struct clientData *, struct serverData *
+                , const int socket); 
+
+
+
+/*
+  Remove clients name from rooms and serverInfo
+*/
+void clientQuit (struct clientData * originCli, struct serverData * serverInfo);
+
+
+
+/* 
+  Join a channel or create if DNE
+*/
+void joinRoom (struct prsdCommand * cmd, struct clientData * client,
+                struct serverData * server);
+
+
+
+void listRooms (struct serverData * serverInfo, const int socket);
+
+
+
+void changeNick (struct prsdCommand * cmd, struct clientData * client);
 
 
 
 
-void clientQuit (char * mesg, struct clientData * originCli, struct serverData * serverInfo, 
-                  const int socket);
+void who (struct prsdCommand * cmd, struct clientData * client,
+                struct serverData * server, const int socket);
+
+
+
+
+void part (struct prsdCommand * cmd, struct clientData * client,
+                struct serverData * server, const int socket);
+
+
+
+void broadcast (struct prsdCommand * cmd, struct clientData * client,
+                struct serverData * server, const int socket);
 
 #endif

@@ -7,37 +7,6 @@ int SIZE = 512;
 
 
 
-/*
- * Copy src to string dst of size siz.  At most siz-1 characters
- * will be copied.  Always NUL terminates (unless siz == 0).
- * Returns strlen(src); if retval >= siz, truncation occurred.
- */
-size_t strlcpy(char *dst, const char *src, size_t siz)
-{
-  char *d = dst;
-  const char *s = src;
-  size_t n = siz;
-
-  // Copy as many bytes as will fit 
-  if (n != 0 && --n != 0) {
-    do {
-      if ((*d++ = *s++) == 0)
-        break;
-    } while (--n != 0);
-  }
-
-  // Not enough room in dst, add NUL and traverse rest of src
-  if (n == 0) {
-    if (siz != 0)
-      *d = '\0';        
-    while (*s++)
-      ;
-  }
-  return(s - src - 1);   
-}
-
-
-
 int sendMessage (char * buffer, const int socket)
 {
   if (write(socket, buffer, SIZE) == -1){
@@ -49,27 +18,9 @@ int sendMessage (char * buffer, const int socket)
 
 
 
-int parseMessage (char * msg, int bufLen)
-{
-  if (msg[0] == '/') {
-    // Command message
-    if (strcmp (msg, "quit") == 0) {
-      strlcpy (msg, "Quitting\n", sizeof(msg));
-      return -1;
-    }
-  }
-  
-  snprintf (msg, bufLen, "SERVER: Good point, too true\n");
-  
-  return 0;
-}
-
-
-
-
 void getCommands (char * buffer)
 {
- memset (buffer, '\0', SIZE);
+ //memset (buffer, '\0', SIZE);
 
  snprintf (buffer, SIZE, "\n====Client commands====\n"
 	"/NICK <new nick>: change nickname\n"
@@ -154,19 +105,20 @@ void processMessage (char * message, struct serverData * data, const int socket)
     printf("nick:: %.*s\n", len_nick, message+1); 
     printf("un:: %.*s\n",len_un, message+len_nick+2);
     printf("hn:: %.*s\n",len_hn, message+len_nick+len_un+3); 
-    //printf("nick:: %.*%s\n",len_cmd, message+len_nick+len_un+len_hn+4, 
-    //printf("nick:: %.*%s\n",len_param, message+len_nick+len_un+len_hn+len_cmd+5, 
-    //printf("nick:: %.*%s\n",len_msg, message+len_nick+len_un+len_hn+len_cmd+len_param+6);
+    printf("cmd:: %.*s\n",len_cmd, message+len_nick+len_un+len_hn+4);
+    printf("param:: %.*s\n",len_param, message+len_nick+len_un+len_hn+len_cmd+5);
+    printf("rest:: %.*s\n",len_msg, message+len_nick+len_un+len_hn+len_cmd+len_param+6);
 
   // Designed for single client, multiple TODO
   if (!*(int*)cdPtr->nickname) { // Client DNE, add new
+    data->activeClients++;
     strncpy (cdPtr->nickname, message+1, len_nick);  
     strncpy (cdPtr->username, message+len_nick+2, len_un);
     strncpy (cdPtr->hostname, message+len_nick+len_un+3, len_hn);
     snprintf (message, SIZE, "Welcome %s!! Here are the supported commands:\n", 
                 cdPtr->nickname);
     getCommands (message+strlen(message)-2); // Append help to welcome command
-    sendMessage (message, SIZE);  // Send welcome message
+    sendMessage (message, socket);  // Send welcome message
   } 
   else { // Client exists, process message and respond
     if (len_cmd > 1) {
@@ -205,7 +157,7 @@ void doCommand (struct prsdCommand * pcommand, struct clientData * originCli,
   switch (commandIndex) {
     case 1 :
       // QUIT
-      //clientQuit (prsdCommand->message, originClient, serverInfo, socket);
+      clientQuit (originCli, serverInfo);
       printf("Client say quit\n");
       break;
 
@@ -217,48 +169,50 @@ void doCommand (struct prsdCommand * pcommand, struct clientData * originCli,
 
     case 3 :
       // HELP
-      //getCommands (buffer, SIZE);
-      //sendMessage (buffer, socket);
+      getCommands (pcommand);
+      sendMessage (pcommand, socket);
       printf("Client say help\n");
       break;
 
     case 4 :
-      // CMD
+      // CMD  -- Maybe not actually possible
       printf("Client say rce\n");
       break;
 
     case 5 :
       // LIST
+      listRooms (serverInfo, socket);
       printf("Client say LIST\n");
       break;
 
     case 6 :
       // NICK
+      changeNick (pcommand, originCli);
       printf("Client say NICK\n");
       break;
 
     case 7 :
       // WHO
+      who (pcommand, originCli, serverInfo, socket);
       printf("Client say WHO\n");
       break;
 
     case 8 :
       // JOIN
-      printf("Client say JOIM\n");
+      joinRoom (pcommand, originCli, serverInfo);
       break;
 
     case 9 :
       // PART
+      part (pcommand, originCli, serverInfo, socket);
       printf("Client say PART\n");
       break;
       
     case 10 :
       // MSG
+      broadcast (pcommand, originCli, serverInfo, socket);
       printf("Client say PART\n");
       break;
-
-    default :  
-      printf ("It shouldn't be like this but it do"); 
   }
 }
 
@@ -267,9 +221,120 @@ void doCommand (struct prsdCommand * pcommand, struct clientData * originCli,
 
 
 
-void clientQuit (char * mesg, struct clientData * originCli, 
-                  struct serverData * serverInfo, const int socket)
+void clientQuit (struct clientData * originCli, struct serverData * serverInfo)
 {
-  
+  // remove from lists
+  memset (originCli->hostname, '\0', 32); 
+  memset (originCli->username, '\0', 32);
+  memset (originCli->nickname, '\0', 9);
+
+  for (int i = 0; i < serverInfo->roomCount; i++) {
+    serverInfo->rooms[i].members = NULL;
+  }
+
 } 
 
+
+
+void joinRoom (struct prsdCommand * cmd, struct clientData * client,
+      struct serverData * server)
+{
+  int added = 0;
+  for (int i = 0; i < server->roomCount; ++i) {
+    if (strcmp (cmd->params, server->rooms[i].name) == 0) {
+      // Replace with for loop for multiple members
+      if (client == server->rooms[i].members) {
+        server->rooms[i].members = client;
+        added = 1;
+      }
+        break;
+    }
+  }
+  // Not added, create room
+  if (!added && server->roomCount < 16) {
+    strcpy (server->rooms[server->roomCount].name, cmd->params);
+    strcpy (server->rooms[server->roomCount].name, client->nickname);
+    server->roomCount++;
+  }
+  
+}
+
+
+
+void listRooms (struct serverData * serverInfo, const int socket)
+{
+  char buffer[SIZE];
+  snprintf (buffer, sizeof buffer, "==== Channels ====\n");
+  for (int i = 0; i < serverInfo->roomCount; i++){
+    snprintf (buffer+ strlen(buffer), "%s\n", serverInfo->rooms[i].name);
+  }
+  sendMessage (buffer, socket);
+}
+
+
+
+void changeNick (struct prsdCommand * cmd, struct clientData * client)
+{
+  // Only the client record needs to be updated
+  memset (client->nickname, '\0', 9);
+  strcpy (client->nickname, cmd->params);
+
+}
+
+
+
+void who (struct prsdCommand * cmd, struct clientData * client,
+                struct serverData * server, const int socket)
+{
+  char buffer[SIZE];
+  memset (buffer, '\0', 64);
+
+  for (int i = 0; i < server->roomCount; ++i) {
+    if (strcmp (cmd->params, server->rooms[i].name) == 0 
+       && server->rooms[i].members == client) {
+      // Replace with loop when multiple clients are connected
+      snprintf (buffer, 64, "Members of #%s\n------------\n%s\n", 
+                  cmd->params, server->rooms[i].members->nickname);
+      sendMessage (buffer, socket);
+    }
+  }
+}
+
+
+
+void part (struct prsdCommand * cmd, struct clientData * client,
+                struct serverData * server, const int socket)
+{
+  char * buffer[SIZE];
+  memset (buffer, '\0', SIZE);
+
+  for (int i = 0; i < server->roomCount; ++i) {
+    if (strcmp (cmd->params, server->rooms[i].name) == 0) {
+      // Replace with for loop for multiple members
+      if (client ==  server->rooms[i].members) 
+        server->rooms[i].members = NULL;
+        snprintf (buffer, SIZE, "You have left channel #%s\n", server->rooms[i].name);
+        sendMessage (buffer, socket);
+      break;
+    }
+  }
+}
+
+
+
+void broadcast (struct prsdCommand * cmd, struct clientData * client,
+                struct serverData * server, const int socket)
+{
+  char * buffer[SIZE];
+  memset (buffer, '\0', SIZE);
+
+  for (int i = 0; i < server->roomCount; ++i) {
+    if (strcmp (cmd->params, server->rooms[i].name) == 0) {
+      if (client ==  server->rooms[i].members) 
+      // Client is member of group, can send message
+        snprintf (buffer, SIZE, "#%s: %s\n", server->rooms[i].name, cmd->message);
+        sendMessage (buffer, socket);
+      break;
+    }
+  }
+}                

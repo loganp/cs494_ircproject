@@ -58,7 +58,7 @@ void getNick (char * buffer, int bufSize)
 */
 int commandCheck (char * message)
 {
-  char noParamCmd[] = "QUIT DIE HELP CMD LIST NICK WHO JOIN PART MSG",
+  char noParamCmd[] = "QUIT DIE HELP CMD LIST ",
        * tok;
 
   int i = 1;
@@ -110,7 +110,7 @@ void createPacket (struct userInfo * info, char msg[])
 
   strcpy (mesg, msg);
   rest = mesg;
-// /boop beep message
+
   tok = strtok_r (rest, " ", &rest);   // Extract first token should be cmd
   if (tok) {
     if (*tok == '/' && (cmdType = commandCheck (tok+1))){
@@ -135,6 +135,7 @@ void createPacket (struct userInfo * info, char msg[])
       }
     }
     else // Not a command, everything is message
+      strcpy (cmd, tok); // is valid command, save
       snprintf (msg, 256, ":%s!%s@%s     :%s %s\r\n", 
         info->nickname, info->username, info->hostname, cmd, rest); 
   }
